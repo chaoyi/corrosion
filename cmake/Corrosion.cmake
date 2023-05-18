@@ -1461,7 +1461,7 @@ ANCHOR_END: corrosion_add_cxxbridge
 #]=======================================================================]
 function(corrosion_add_cxxbridge cxx_target)
     set(OPTIONS)
-    set(ONE_VALUE_KEYWORDS CRATE)
+    set(ONE_VALUE_KEYWORDS CRATE LIB_TYPE CXX_IMPL_ANNOTATIONS)
     set(MULTI_VALUE_KEYWORDS FILES)
     cmake_parse_arguments(PARSE_ARGV 1 _arg "${OPTIONS}" "${ONE_VALUE_KEYWORDS}" "${MULTI_VALUE_KEYWORDS}")
 
@@ -1473,6 +1473,15 @@ function(corrosion_add_cxxbridge cxx_target)
             message(FATAL_ERROR "Required parameter `${keyword}` may not be set to an empty string.")
         endif()
     endforeach()
+
+    # Set default values for optional arguments if not provided by the user
+    if(NOT DEFINED _arg_LIB_TYPE)
+        set(_arg_LIB_TYPE STATIC)
+    endif()
+
+    if(NOT DEFINED _arg_CXX_IMPL_ANNOTATIONS)
+        set(_arg_CXX_IMPL_ANNOTATIONS "")
+    endif()
 
     get_target_property(manifest_path "${_arg_CRATE}" INTERFACE_COR_PACKAGE_MANIFEST_PATH)
 
@@ -1533,6 +1542,7 @@ function(corrosion_add_cxxbridge cxx_target)
                         "CARGO_BUILD_RUSTC=${_CORROSION_RUSTC}"
                     ${_CORROSION_CARGO} install
                     cxxbridge-cmd
+                    --git https://github.com/chaoyi/cxx
                     --version "${cxx_required_version}"
                     --root "${CMAKE_BINARY_DIR}/corrosion/cxxbridge_v${cxx_required_version}"
                     --quiet
@@ -1570,7 +1580,15 @@ function(corrosion_add_cxxbridge cxx_target)
     set(header_placement_dir "${generated_dir}/include/${cxx_target}")
     set(source_placement_dir "${generated_dir}/src")
 
-    add_library(${cxx_target} STATIC)
+    # Pass the user-specified macro to the cxxbridge command
+    if(_arg_CXX_IMPL_ANNOTATIONS)
+        set(cxxbridge_cmd_options --cxx-impl-annotations "${_arg_CXX_IMPL_ANNOTATIONS}")
+    else()
+        set(cxxbridge_cmd_options)
+    endif()
+
+    add_library(${cxx_target} ${_arg_LIB_TYPE})
+
     target_include_directories(${cxx_target}
         PUBLIC
             $<BUILD_INTERFACE:${generated_dir}/include>
@@ -1620,11 +1638,12 @@ function(corrosion_add_cxxbridge cxx_target)
             "${header_placement_dir}/${cxx_header}"
             "${source_placement_dir}/${cxx_source}"
             COMMAND
-                ${cxxbridge} ${rust_source_path} --header --output "${header_placement_dir}/${cxx_header}"
+                ${cxxbridge} ${rust_source_path} --header --include "rust/cxx.h" --output "${header_placement_dir}/${cxx_header}" ${cxxbridge_cmd_options}
             COMMAND
                 ${cxxbridge} ${rust_source_path}
                     --output "${source_placement_dir}/${cxx_source}"
                     --include "${cxx_target}/${cxx_header}"
+                    ${cxxbridge_cmd_options}
             DEPENDS "cxxbridge_v${cxx_required_version}" "${rust_source_path}"
             COMMENT "Generating cxx bindings for crate ${_arg_CRATE}"
         )
