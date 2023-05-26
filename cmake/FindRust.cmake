@@ -127,6 +127,11 @@ function(_corrosion_parse_target_triple target_triple out_arch out_vendor out_os
     set("${out_env}" "${CMAKE_MATCH_6}" PARENT_SCOPE)
 endfunction()
 
+if (NOT "${Rust_ADDITIONAL_LIBS}" STREQUAL "$CACHE{Rust_ADDITIONAL_LIBS}")
+    # Promote Rust_ADDITIONAL_LIBS to a cache variable if it is not already a cache variable
+    set(Rust_ADDITIONAL_LIBS ${Rust_ADDITIONAL_LIBS} CACHE STRING "Additional libraries to link" FORCE)
+endif()
+
 function(_corrosion_determine_libs_new target_triple out_libs)
     # Cleanup on reconfigure to get a cleans state (in case we change something in the future)
     file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/corrosion/required_libs")
@@ -172,6 +177,10 @@ function(_corrosion_determine_libs_new target_triple out_libs)
             set(libs_list "${stripped_lib_list}")
             # Special case `msvcrt` to link with the debug version in Debug mode.
             list(TRANSFORM libs_list REPLACE "^msvcrt$" "\$<\$<CONFIG:Debug>:msvcrtd>")
+            foreach(lib ${Rust_ADDITIONAL_LIBS})
+                list(APPEND libs_list "${lib}")
+            endforeach()
+            message(STATUS "libs_list after modifications: ${libs_list}")
         else()
             message(DEBUG "Determining required native libraries - failed: Regex match failure.")
             message(DEBUG "`native-static-libs` not found in: `${cargo_build_error_message}`")
